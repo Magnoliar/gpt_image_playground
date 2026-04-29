@@ -14,12 +14,12 @@ export default function Header() {
         <div className="flex items-start gap-1">
           <h1 className="text-lg font-bold tracking-tight">
             <a
-              href="https://github.com/CookSleep/gpt_image_playground"
+              href="https://github.com/Magnoliar/gpt_image_playground"
               target="_blank"
               rel="noopener noreferrer"
               className="text-gray-800 dark:text-gray-100 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
             >
-              GPT Image Playground
+              GPT Image Playground · 云雾版
             </a>
           </h1>
           {hasUpdate && latestRelease && (
