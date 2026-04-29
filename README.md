@@ -2,6 +2,8 @@
 
 基于 OpenAI 图像生成接口的图片生成与编辑工具。提供简洁的 Web UI，支持文本生成图片、参考图编辑、可视化参数调节、历史记录管理与本地数据导入导出。
 
+> 本 Fork 版本已适配 **云雾 API**（yunwu.ai），默认 API 地址和模式已切换为云雾 API，开箱即用。
+
 
 > 如有调用非本地的 HTTP API 的需求，请使用 GitHub Pages 版本或自行部署，因为 `.dev` 域名要求页面本身及其加载的资源（的来源）均为 HTTPS。
 
@@ -56,7 +58,7 @@ https://cooksleep.github.io/gpt_image_playground
 - **文本生图**：输入提示词，可调用 `images/generations` 或 Responses API 的 `image_generation` 工具生成图片。
 - **参考图编辑**：支持上传最多 16 张参考图，可调用 `images/edits` 或 Responses API 多模态输入进行图片编辑。支持文件选择、粘贴和拖拽三种方式。
 - **遮罩编辑**：支持在参考图上绘制遮罩后进行局部编辑。遮罩主图会按官方接口限制预处理为安全工作图，避免高分辨率图片导致提交失败。需要注意的是，根据官方文档说明，遮罩编辑仍基于提示词引导模型，无法完全控制模型实际编辑区域。
-- **接口模式切换**：支持在设置中选择 Images API (`/v1/images`) 或 Responses API (`/v1/responses`)。
+- **接口模式切换**：支持在设置中选择云雾 API (`/v1/images`)、Images API (`/v1/images`) 或 Responses API (`/v1/responses`)。默认为云雾 API。
 - **批量生成**：单次可设置生成多张图片。
 - **Codex CLI 兼容模式**：可在设置中开启 Codex CLI 模式。开启后根据 Codex CLI 中的实际可用能力，将质量参数固定为 `auto` 且不会发送 `quality` 字段；Images API 的多图生成会拆分为多个并发请求完成，解决该 API 数量参数无效的问题；提示词文本开头会加入简短的不改写要求，避免模型重写提示词，偏离原意。
 
@@ -101,10 +103,10 @@ https://cooksleep.github.io/gpt_image_playground
 如需预置默认 API 节点，可在 Vercel 项目的 **Settings → Environment Variables** 中添加：
 
 ```bash
-VITE_DEFAULT_API_URL=https://api.openai.com/v1
+VITE_DEFAULT_API_URL=https://yunwu.ai/v1
 ```
 
-部署完成后，打开 Vercel 分配的域名，在页面右上角设置中填入 API Key 即可使用。
+部署完成后，打开 Vercel 分配的域名，在页面右上角设置中填入 API Key 即可使用。默认已配置为云雾 API 模式。
 
 **更新说明：**
 
@@ -259,6 +261,7 @@ docker compose up -d
 
 点击页面右上角的设置图标，你可以随时更改 API 相关的配置。
 
+- **云雾 API（默认）**：适配 yunwu.ai 第三方 API。文生图调用 `/v1/images/generations`，遮罩编辑调用 `/v1/images/edits`，图生图合并使用 `gpt-image-2-all` 模型通过 `/v1/images/generations` 的 `image` 参数传入参考图（最多 5 张）。默认模型为 `gpt-image-2-all`，质量参数和审核参数不可用。支持同时返回 chat completion 格式和标准 images 格式的响应。
 - **Images API**：调用 `/v1/images/generations` 和 `/v1/images/edits`，模型需要填写 GPT Image 模型，例如 `gpt-image-2`。
 - **Responses API**：调用 `/v1/responses` 并使用 `image_generation` 工具，模型需要填写支持该工具的文本模型，例如 `gpt-5.5`。
 - **API 代理**：开启后，浏览器会请求同源的 `/api-proxy/` 路径，再由当前后端转发到真实 API，用于绕开浏览器 CORS 限制。代理目标由部署端配置决定，例如 Docker 中的 `API_URL` 或本地开发的 `dev-proxy.config.json`。
@@ -269,10 +272,15 @@ docker compose up -d
 应用支持通过 URL 查询参数快速填充配置，非常适合书签或分享给他人使用：
 - `?apiUrl=https://你的代理地址.com`
 - `?apiKey=sk-xxxx`
-- `?apiMode=images` 或 `?apiMode=responses`，未传时默认使用 `images`
+- `?apiMode=yunwu`、`?apiMode=images` 或 `?apiMode=responses`，未传时默认使用 `yunwu`
 - `?codexCli=true` 或 `?codexCli=false`，未传时默认关闭，仅 `true` 会开启 Codex CLI 模式
 
 例如：
+- 接入云雾 API：
+  ```
+  https://your-domain.vercel.app?apiKey={your-yunwu-api-key}
+  ```
+
 - 接入 New API 聊天应用：
   ```
   https://gpt-image-playground.cooksleep.dev?apiUrl={address}&apiKey={key}

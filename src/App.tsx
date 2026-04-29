@@ -38,7 +38,7 @@ export default function App() {
     }
 
     const apiModeParam = searchParams.get('apiMode')
-    if (apiModeParam === 'images' || apiModeParam === 'responses') {
+    if (apiModeParam === 'images' || apiModeParam === 'responses' || apiModeParam === 'yunwu') {
       nextSettings.apiMode = apiModeParam
     }
 

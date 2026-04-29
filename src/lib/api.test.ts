@@ -23,7 +23,7 @@ describe('callImageApi', () => {
     }))
 
     const result = await callImageApi({
-      settings: { ...DEFAULT_SETTINGS, apiKey: 'test-key', codexCli: true },
+      settings: { ...DEFAULT_SETTINGS, apiKey: 'test-key', codexCli: true, apiMode: 'images' },
       prompt: 'prompt',
       params: { ...DEFAULT_PARAMS },
       inputImageDataUrls: [],
@@ -54,7 +54,7 @@ describe('callImageApi', () => {
     }))
 
     const result = await callImageApi({
-      settings: { ...DEFAULT_SETTINGS, apiKey: 'test-key', codexCli: true },
+      settings: { ...DEFAULT_SETTINGS, apiKey: 'test-key', codexCli: true, apiMode: 'images' },
       prompt: 'prompt',
       params: { ...DEFAULT_PARAMS },
       inputImageDataUrls: [],
@@ -86,6 +86,7 @@ describe('callImageApi', () => {
         apiKey: 'test-key',
         apiProxy: true,
         baseUrl: 'http://api.example.com/v1',
+        apiMode: 'images',
       },
       prompt: 'prompt',
       params: { ...DEFAULT_PARAMS },
@@ -113,6 +114,7 @@ describe('callImageApi', () => {
         apiKey: 'test-key',
         apiProxy: true,
         baseUrl: 'http://api.example.com/v1',
+        apiMode: 'images',
       },
       prompt: 'prompt',
       params: { ...DEFAULT_PARAMS },

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { normalizeBaseUrl } from '../lib/api'
 import { isApiProxyAvailable, readClientDevProxyConfig } from '../lib/devProxy'
 import { useStore, exportData, importData, clearAllData } from '../store'
-import { DEFAULT_IMAGES_MODEL, DEFAULT_RESPONSES_MODEL, DEFAULT_SETTINGS, type AppSettings } from '../types'
+import { DEFAULT_IMAGES_MODEL, DEFAULT_RESPONSES_MODEL, DEFAULT_YUNWU_MODEL, DEFAULT_SETTINGS, type AppSettings } from '../types'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import Select from './Select'
 
@@ -20,7 +20,7 @@ export default function SettingsModal() {
   const apiProxyEnabled = apiProxyAvailable && draft.apiProxy
 
   const getDefaultModelForMode = (apiMode: AppSettings['apiMode']) =>
-    apiMode === 'responses' ? DEFAULT_RESPONSES_MODEL : DEFAULT_IMAGES_MODEL
+    apiMode === 'responses' ? DEFAULT_RESPONSES_MODEL : apiMode === 'yunwu' ? DEFAULT_YUNWU_MODEL : DEFAULT_IMAGES_MODEL
 
   useEffect(() => {
     if (showSettings) {
@@ -30,7 +30,7 @@ export default function SettingsModal() {
   }, [apiProxyAvailable, showSettings, settings])
 
   const commitSettings = (nextDraft: AppSettings) => {
-    const apiMode = nextDraft.apiMode === 'responses' ? 'responses' : DEFAULT_SETTINGS.apiMode
+    const apiMode = nextDraft.apiMode === 'responses' || nextDraft.apiMode === 'yunwu' ? nextDraft.apiMode : DEFAULT_SETTINGS.apiMode
     const defaultModel = getDefaultModelForMode(apiMode)
     const normalizedDraft = {
       ...nextDraft,
@@ -222,7 +222,7 @@ export default function SettingsModal() {
                   onChange={(value) => {
                     const apiMode = value as AppSettings['apiMode']
                     const nextModel =
-                      draft.model === DEFAULT_IMAGES_MODEL || draft.model === DEFAULT_RESPONSES_MODEL
+                      draft.model === DEFAULT_IMAGES_MODEL || draft.model === DEFAULT_RESPONSES_MODEL || draft.model === DEFAULT_YUNWU_MODEL
                         ? getDefaultModelForMode(apiMode)
                         : draft.model
                     const nextDraft = { ...draft, apiMode, model: nextModel }
@@ -230,13 +230,14 @@ export default function SettingsModal() {
                     commitSettings(nextDraft)
                   }}
                   options={[
+                    { label: '云雾 API (/v1/images)', value: 'yunwu' },
                     { label: 'Images API (/v1/images)', value: 'images' },
                     { label: 'Responses API (/v1/responses)', value: 'responses' },
                   ]}
                   className="w-full rounded-xl border border-gray-200/70 bg-white/60 px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-blue-300 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-gray-200 dark:focus:border-blue-500/50"
                 />
                 <div data-selectable-text className="mt-1 text-[10px] text-gray-400 dark:text-gray-500">
-                  支持通过查询参数覆盖：<code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">apiMode=images</code> 或 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">apiMode=responses</code>。
+                  支持通过查询参数覆盖：<code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">apiMode=yunwu</code>、<code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">apiMode=images</code> 或 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">apiMode=responses</code>。
                 </div>
               </label>
 
@@ -255,6 +256,8 @@ export default function SettingsModal() {
                 <div data-selectable-text className="mt-1 text-[10px] text-gray-400 dark:text-gray-500">
                   {(draft.apiMode ?? DEFAULT_SETTINGS.apiMode) === 'responses' ? (
                     <>Responses API 需要使用支持 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">image_generation</code> 工具的文本模型，例如 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">{DEFAULT_RESPONSES_MODEL}</code>。</>
+                  ) : (draft.apiMode ?? DEFAULT_SETTINGS.apiMode) === 'yunwu' ? (
+                    <>云雾 API 支持 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">{DEFAULT_YUNWU_MODEL}</code>（图生图合并）和 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">{DEFAULT_IMAGES_MODEL}</code>（文生图/遮罩编辑）。</>
                   ) : (
                     <>Images API 需要使用 GPT Image 模型，例如 <code className="rounded bg-gray-100 px-1 py-0.5 dark:bg-white/[0.06]">{DEFAULT_IMAGES_MODEL}</code>。</>
                   )}

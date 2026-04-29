@@ -139,7 +139,7 @@ export const useStore = create<AppState>()(
           ...st.settings,
           ...s,
           apiMode:
-            s.apiMode === 'images' || s.apiMode === 'responses'
+            s.apiMode === 'images' || s.apiMode === 'responses' || s.apiMode === 'yunwu'
               ? s.apiMode
               : st.settings.apiMode ?? DEFAULT_SETTINGS.apiMode,
           codexCli: s.codexCli ?? st.settings.codexCli ?? DEFAULT_SETTINGS.codexCli,
@@ -311,7 +311,8 @@ function normalizeParamsForSettings(params: TaskParams, settings: AppSettings): 
   return {
     ...params,
     size: normalizeImageSize(params.size) || DEFAULT_PARAMS.size,
-    quality: settings.codexCli ? DEFAULT_PARAMS.quality : params.quality,
+    quality: (settings.codexCli || settings.apiMode === 'yunwu') ? DEFAULT_PARAMS.quality : params.quality,
+    moderation: settings.apiMode === 'yunwu' ? 'auto' : params.moderation,
   }
 }
 
@@ -469,7 +470,7 @@ async function executeTask(taskId: string) {
       (revisedPrompt) => revisedPrompt?.trim() && revisedPrompt.trim() !== task.prompt.trim(),
     )
     const hasRevisedPromptValue = result.revisedPrompts?.some((revisedPrompt) => revisedPrompt?.trim())
-    if (!settings.codexCli) {
+    if (!settings.codexCli && settings.apiMode !== 'yunwu') {
       if (promptWasRevised) {
         showCodexCliPrompt()
       } else if (!hasRevisedPromptValue) {

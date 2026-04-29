@@ -1,6 +1,6 @@
 // ===== 设置 =====
 
-export type ApiMode = 'images' | 'responses'
+export type ApiMode = 'images' | 'responses' | 'yunwu'
 
 export interface AppSettings {
   baseUrl: string
@@ -12,16 +12,17 @@ export interface AppSettings {
   apiProxy: boolean
 }
 
-const DEFAULT_BASE_URL = import.meta.env.VITE_DEFAULT_API_URL?.trim() || 'https://api.openai.com/v1'
+const DEFAULT_BASE_URL = import.meta.env.VITE_DEFAULT_API_URL?.trim() || 'https://yunwu.ai/v1'
 export const DEFAULT_IMAGES_MODEL = 'gpt-image-2'
 export const DEFAULT_RESPONSES_MODEL = 'gpt-5.5'
+export const DEFAULT_YUNWU_MODEL = 'gpt-image-2-all'
 
 export const DEFAULT_SETTINGS: AppSettings = {
   baseUrl: DEFAULT_BASE_URL,
   apiKey: '',
-  model: DEFAULT_IMAGES_MODEL,
+  model: DEFAULT_YUNWU_MODEL,
   timeout: 300,
-  apiMode: 'images',
+  apiMode: 'yunwu',
   codexCli: false,
   apiProxy: false,
 }
@@ -164,6 +165,34 @@ export interface ResponsesApiResponse {
     moderation?: string
     n?: number
   }>
+}
+
+// ===== 云雾 API 响应 =====
+
+export interface YunwuApiResponse {
+  /** gpt-image-2-all 标准格式 */
+  data?: Array<{
+    url?: string
+    b64_json?: string
+    revised_prompt?: string
+  }>
+  /** gpt-image-2 chat completion 格式 */
+  choices?: Array<{
+    index?: number
+    message?: {
+      role?: string
+      content?: string
+    }
+    finish_reason?: string
+  }>
+  created?: number
+  id?: string
+  object?: string
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+  }
 }
 
 // ===== 导出数据 =====

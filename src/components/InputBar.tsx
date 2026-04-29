@@ -18,7 +18,8 @@ function ButtonTooltip({ visible, text }: { visible: boolean; text: string }) {
 }
 
 /** API 支持的最大参考图数量 */
-const API_MAX_IMAGES = 16
+const API_MAX_IMAGES_DEFAULT = 16
+const API_MAX_IMAGES_YUNWU = 5
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 640)
@@ -147,7 +148,8 @@ export default function InputBar() {
   const isMobile = useIsMobile()
 
   const canSubmit = prompt.trim() && settings.apiKey
-  const atImageLimit = inputImages.length >= API_MAX_IMAGES
+  const apiMaxImages = settings.apiMode === 'yunwu' ? API_MAX_IMAGES_YUNWU : API_MAX_IMAGES_DEFAULT
+  const atImageLimit = inputImages.length >= apiMaxImages
   const maskTargetImage = maskDraft
     ? inputImages.find((img) => img.id === maskDraft.targetImageId) ?? null
     : null
@@ -166,16 +168,16 @@ export default function InputBar() {
   }, [params.n])
 
   useEffect(() => {
-    if (settings.apiMode === 'responses' && params.moderation !== 'auto') {
+    if ((settings.apiMode === 'responses' || settings.apiMode === 'yunwu') && params.moderation !== 'auto') {
       setParams({ moderation: 'auto' })
     }
   }, [params.moderation, settings.apiMode, setParams])
 
   useEffect(() => {
-    if (settings.codexCli && params.quality !== 'auto') {
+    if ((settings.codexCli || settings.apiMode === 'yunwu') && params.quality !== 'auto') {
       setParams({ quality: 'auto' })
     }
-  }, [params.quality, settings.codexCli, setParams])
+  }, [params.quality, settings.codexCli, settings.apiMode, setParams])
 
   useEffect(() => () => {
     if (compressionHintTimerRef.current != null) {
@@ -238,7 +240,7 @@ export default function InputBar() {
   }, [nInput, params.n, setParams])
 
   const showModerationHint = () => {
-    if (settings.apiMode === 'responses') setModerationHintVisible(true)
+    if (settings.apiMode === 'responses' || settings.apiMode === 'yunwu') setModerationHintVisible(true)
   }
 
   const hideModerationHint = () => {
@@ -254,7 +256,7 @@ export default function InputBar() {
   }
 
   const startModerationHintTouch = () => {
-    if (settings.apiMode !== 'responses') return
+    if (settings.apiMode !== 'responses' && settings.apiMode !== 'yunwu') return
     moderationHintTimerRef.current = window.setTimeout(() => {
       setModerationHintVisible(true)
       moderationHintTimerRef.current = null
@@ -283,7 +285,7 @@ export default function InputBar() {
   }
 
   const showQualityHint = () => {
-    if (settings.codexCli) setQualityHintVisible(true)
+    if (settings.codexCli || settings.apiMode === 'yunwu') setQualityHintVisible(true)
   }
 
   const hideQualityHint = () => {
@@ -299,7 +301,7 @@ export default function InputBar() {
   }
 
   const startQualityHintTouch = () => {
-    if (!settings.codexCli) return
+    if (!settings.codexCli && settings.apiMode !== 'yunwu') return
     qualityHintTimerRef.current = window.setTimeout(() => {
       setQualityHintVisible(true)
       qualityHintTimerRef.current = null
@@ -331,15 +333,15 @@ export default function InputBar() {
   const handleFiles = async (files: FileList | File[]) => {
     try {
       const currentCount = useStore.getState().inputImages.length
-      if (currentCount >= API_MAX_IMAGES) {
+      if (currentCount >= apiMaxImages) {
         useStore.getState().showToast(
-          `参考图数量已达上限（${API_MAX_IMAGES} 张），无法继续添加`,
+          `参考图数量已达上限（${apiMaxImages} 张），无法继续添加`,
           'error',
         )
         return
       }
 
-      const remaining = API_MAX_IMAGES - currentCount
+      const remaining = apiMaxImages - currentCount
       const accepted = Array.from(files).filter((f) => f.type.startsWith('image/'))
       const toAdd = accepted.slice(0, remaining)
       const discarded = accepted.length - toAdd.length
@@ -350,7 +352,7 @@ export default function InputBar() {
 
       if (discarded > 0) {
         useStore.getState().showToast(
-          `已达上限 ${API_MAX_IMAGES} 张，${discarded} 张图片被丢弃`,
+          `已达上限 ${apiMaxImages} 张，${discarded} 张图片被丢弃`,
           'error',
         )
       }
@@ -848,9 +850,9 @@ export default function InputBar() {
       >
         <span className="text-gray-400 dark:text-gray-500 ml-1">质量</span>
         <Select
-          value={settings.codexCli ? 'auto' : params.quality}
+          value={(settings.codexCli || settings.apiMode === 'yunwu') ? 'auto' : params.quality}
           onChange={(val) => {
-            if (!settings.codexCli) setParams({ quality: val as any })
+            if (!settings.codexCli && settings.apiMode !== 'yunwu') setParams({ quality: val as any })
           }}
           options={[
             { label: 'auto', value: 'auto' },
@@ -858,14 +860,14 @@ export default function InputBar() {
             { label: 'medium', value: 'medium' },
             { label: 'high', value: 'high' },
           ]}
-          disabled={settings.codexCli}
-          className={settings.codexCli
+          disabled={settings.codexCli || settings.apiMode === 'yunwu'}
+          className={(settings.codexCli || settings.apiMode === 'yunwu')
             ? 'px-3 py-1.5 rounded-xl border border-gray-200/60 dark:border-white/[0.08] bg-gray-100/50 dark:bg-white/[0.05] opacity-50 cursor-not-allowed text-xs transition-all duration-200 shadow-sm'
             : selectClass}
         />
         <ButtonTooltip
-          visible={settings.codexCli && qualityHintVisible}
-          text="Codex CLI 不支持质量参数"
+          visible={(settings.codexCli || settings.apiMode === 'yunwu') && qualityHintVisible}
+          text={settings.apiMode === 'yunwu' ? '云雾 API 不支持质量参数' : 'Codex CLI 不支持质量参数'}
         />
       </label>
       <label className="flex flex-col gap-0.5">
@@ -922,22 +924,22 @@ export default function InputBar() {
       >
         <span className="text-gray-400 dark:text-gray-500 ml-1">审核</span>
         <Select
-          value={settings.apiMode === 'responses' ? 'auto' : params.moderation}
+          value={(settings.apiMode === 'responses' || settings.apiMode === 'yunwu') ? 'auto' : params.moderation}
           onChange={(val) => {
-            if (settings.apiMode !== 'responses') setParams({ moderation: val as any })
+            if (settings.apiMode !== 'responses' && settings.apiMode !== 'yunwu') setParams({ moderation: val as any })
           }}
           options={[
             { label: 'auto', value: 'auto' },
             { label: 'low', value: 'low' },
           ]}
-          disabled={settings.apiMode === 'responses'}
-          className={settings.apiMode === 'responses'
+          disabled={settings.apiMode === 'responses' || settings.apiMode === 'yunwu'}
+          className={(settings.apiMode === 'responses' || settings.apiMode === 'yunwu')
             ? 'px-3 py-1.5 rounded-xl border border-gray-200/60 dark:border-white/[0.08] bg-gray-100/50 dark:bg-white/[0.05] opacity-50 cursor-not-allowed text-xs transition-all duration-200 shadow-sm'
             : selectClass}
         />
         <ButtonTooltip
-          visible={settings.apiMode === 'responses' && moderationHintVisible}
-          text="Responses API 不支持审核参数"
+          visible={(settings.apiMode === 'responses' || settings.apiMode === 'yunwu') && moderationHintVisible}
+          text={settings.apiMode === 'yunwu' ? '云雾 API 不支持审核参数' : 'Responses API 不支持审核参数'}
         />
       </label>
       <label className="flex flex-col gap-0.5">
@@ -977,7 +979,7 @@ export default function InputBar() {
             <div className="text-center">
               {atImageLimit ? (
                 <>
-                  <p className="text-lg font-semibold text-red-500">已达上限 {API_MAX_IMAGES} 张</p>
+                  <p className="text-lg font-semibold text-red-500">已达上限 {apiMaxImages} 张</p>
                   <p className="text-sm text-gray-400 mt-1">请先移除部分参考图后再添加</p>
                 </>
               ) : (
@@ -1111,7 +1113,7 @@ export default function InputBar() {
                   onMouseEnter={() => setAttachHover(true)}
                   onMouseLeave={() => setAttachHover(false)}
                 >
-                  <ButtonTooltip visible={atImageLimit && attachHover} text={`参考图数量已达上限（${API_MAX_IMAGES} 张），无法继续添加`} />
+                  <ButtonTooltip visible={atImageLimit && attachHover} text={`参考图数量已达上限（${apiMaxImages} 张），无法继续添加`} />
                   <button
                     onClick={() => !atImageLimit && fileInputRef.current?.click()}
                     className={`p-2.5 rounded-xl transition-all shadow-sm ${
@@ -1119,7 +1121,7 @@ export default function InputBar() {
                         ? 'bg-gray-200 dark:bg-white/[0.04] text-gray-300 dark:text-gray-500 cursor-not-allowed'
                         : 'bg-gray-200 dark:bg-white/[0.06] hover:bg-gray-300 dark:hover:bg-white/[0.1] text-gray-500 dark:text-gray-300 hover:shadow'
                     }`}
-                    title={atImageLimit ? `已达上限 ${API_MAX_IMAGES} 张` : '添加参考图'}
+                    title={atImageLimit ? `已达上限 ${apiMaxImages} 张` : '添加参考图'}
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
@@ -1165,7 +1167,7 @@ export default function InputBar() {
                   onMouseEnter={() => setAttachHover(true)}
                   onMouseLeave={() => setAttachHover(false)}
                 >
-                  <ButtonTooltip visible={atImageLimit && attachHover} text={`参考图数量已达上限（${API_MAX_IMAGES} 张），无法继续添加`} />
+                  <ButtonTooltip visible={atImageLimit && attachHover} text={`参考图数量已达上限（${apiMaxImages} 张），无法继续添加`} />
                   <button
                     onClick={() => !atImageLimit && fileInputRef.current?.click()}
                     className={`p-2.5 rounded-xl transition-all shadow-sm flex-shrink-0 ${
@@ -1173,7 +1175,7 @@ export default function InputBar() {
                         ? 'bg-gray-200 dark:bg-white/[0.04] text-gray-300 dark:text-gray-500 cursor-not-allowed'
                         : 'bg-gray-200 dark:bg-white/[0.06] hover:bg-gray-300 dark:hover:bg-white/[0.1] text-gray-500 dark:text-gray-300'
                     }`}
-                    title={atImageLimit ? `已达上限 ${API_MAX_IMAGES} 张` : '添加参考图'}
+                    title={atImageLimit ? `已达上限 ${apiMaxImages} 张` : '添加参考图'}
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />

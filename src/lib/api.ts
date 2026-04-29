@@ -1,4 +1,4 @@
-import type { AppSettings, ImageApiResponse, ResponsesApiResponse, TaskParams } from '../types'
+import type { AppSettings, ImageApiResponse, ResponsesApiResponse, TaskParams, YunwuApiResponse } from '../types'
 import { dataUrlToBlob, imageDataUrlToPngBlob, maskDataUrlToPngBlob } from './canvasImage'
 import { buildApiUrl, isApiProxyAvailable, readClientDevProxyConfig } from './devProxy'
 
@@ -230,6 +230,7 @@ function mergeActualParams(...sources: Array<Partial<TaskParams>>): Partial<Task
 }
 
 export async function callImageApi(opts: CallApiOptions): Promise<CallApiResult> {
+  if (opts.settings.apiMode === 'yunwu') return callYunwuApi(opts)
   return opts.settings.apiMode === 'responses'
     ? callResponsesImageApi(opts)
     : callImagesApi(opts)
@@ -509,6 +510,227 @@ async function callResponsesImageApiSingle(opts: CallApiOptions): Promise<CallAp
         mergeActualParams(result.actualParams ?? {}),
       ),
       revisedPrompts: imageResults.map((result) => result.revisedPrompt),
+    }
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+// ===== 云雾 API =====
+
+function extractBase64FromContent(content: string, mime: string): string | null {
+  if (!content) return null
+  // 尝试匹配 data URL
+  const dataUrlMatch = content.match(/data:image\/[a-z+]+;base64,([A-Za-z0-9+/=\s]+)/)
+  if (dataUrlMatch) return dataUrlMatch[0]
+  // 尝试匹配纯 base64（至少 100 字符，避免误匹配文字）
+  const b64Match = content.match(/^[A-Za-z0-9+/=\s]{100,}$/)
+  if (b64Match) return `data:${mime};base64,${b64Match[0].replace(/\s/g, '')}`
+  // 尝试匹配 markdown 中的 base64
+  const mdMatch = content.match(/```(?:base64)?\s*\n?([A-Za-z0-9+/=\s]{100,})\n?```/)
+  if (mdMatch) return `data:${mime};base64,${mdMatch[1].replace(/\s/g, '')}`
+  return null
+}
+
+function parseYunwuResponse(payload: YunwuApiResponse, mime: string): Array<{
+  image: string
+  revisedPrompt?: string
+}> {
+  const results: Array<{ image: string; revisedPrompt?: string }> = []
+
+  // 优先检查标准 images 格式 (gpt-image-2-all)
+  if (payload.data && Array.isArray(payload.data) && payload.data.length > 0) {
+    for (const item of payload.data) {
+      if (item.b64_json) {
+        results.push({
+          image: normalizeBase64Image(item.b64_json, mime),
+          revisedPrompt: item.revised_prompt || undefined,
+        })
+      } else if (isHttpUrl(item.url)) {
+        results.push({
+          image: '', // placeholder, will be fetched later
+          revisedPrompt: item.revised_prompt || undefined,
+          _url: item.url,
+        } as any)
+      }
+    }
+    if (results.length > 0) return results
+  }
+
+  // 检查 chat completion 格式 (gpt-image-2)
+  if (payload.choices && Array.isArray(payload.choices) && payload.choices.length > 0) {
+    for (const choice of payload.choices) {
+      const content = choice.message?.content
+      if (!content) continue
+      const b64 = extractBase64FromContent(content, mime)
+      if (b64) {
+        results.push({ image: b64.startsWith('data:') ? b64 : `data:${mime};base64,${b64}` })
+      }
+    }
+  }
+
+  return results
+}
+
+async function callYunwuApi(opts: CallApiOptions): Promise<CallApiResult> {
+  const n = opts.params.n > 0 ? opts.params.n : 1
+  const singleOpts = { ...opts, params: { ...opts.params, n: 1 } }
+  const promises = Array.from({ length: n }).map(() => callYunwuApiSingle(singleOpts))
+  const results = await Promise.allSettled(promises)
+
+  const successfulResults = results
+    .filter((r): r is PromiseFulfilledResult<CallApiResult> => r.status === 'fulfilled')
+    .map((r) => r.value)
+
+  if (successfulResults.length === 0) {
+    const firstError = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+    if (firstError) throw firstError.reason
+    throw new Error('所有并发请求均失败')
+  }
+
+  const images = successfulResults.flatMap((r) => r.images)
+  const actualParamsList = successfulResults.flatMap((r) =>
+    r.actualParamsList?.length ? r.actualParamsList : r.images.map(() => r.actualParams),
+  )
+  const revisedPrompts = successfulResults.flatMap((r) =>
+    r.revisedPrompts?.length ? r.revisedPrompts : r.images.map(() => undefined),
+  )
+  const actualParams = mergeActualParams(
+    successfulResults[0]?.actualParams ?? {},
+    { n: images.length },
+  )
+
+  return { images, actualParams, actualParamsList, revisedPrompts }
+}
+
+async function callYunwuApiSingle(opts: CallApiOptions): Promise<CallApiResult> {
+  const { settings, prompt, params, inputImageDataUrls } = opts
+  const mime = MIME_MAP[params.output_format] || 'image/png'
+  const proxyConfig = readClientDevProxyConfig()
+  const useApiProxy = settings.apiProxy && isApiProxyAvailable(proxyConfig)
+  const requestHeaders = createRequestHeaders(settings)
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), settings.timeout * 1000)
+
+  try {
+    let response: Response
+
+    if (inputImageDataUrls.length > 0 && opts.maskDataUrl) {
+      // 有遮罩：使用 /images/edits multipart
+      const formData = new FormData()
+      formData.append('model', settings.model)
+      formData.append('prompt', prompt)
+      formData.append('size', params.size)
+
+      if (params.n > 1) {
+        formData.append('n', String(params.n))
+      }
+
+      const imageBlobs: Blob[] = []
+      for (let i = 0; i < inputImageDataUrls.length; i++) {
+        const dataUrl = inputImageDataUrls[i]
+        const blob = i === 0
+          ? await imageDataUrlToPngBlob(dataUrl)
+          : await dataUrlToBlob(dataUrl)
+        imageBlobs.push(blob)
+      }
+
+      const maskBlob = await maskDataUrlToPngBlob(opts.maskDataUrl)
+      assertMaskEditFileSize('遮罩主图文件', imageBlobs[0]?.size ?? 0)
+      assertMaskEditFileSize('遮罩文件', maskBlob?.size ?? 0)
+      assertImageInputPayloadSize(
+        imageBlobs.reduce((sum, blob) => sum + blob.size, 0) + maskBlob.size,
+      )
+
+      for (let i = 0; i < imageBlobs.length; i++) {
+        const blob = imageBlobs[i]
+        const ext = blob.type.split('/')[1] || 'png'
+        formData.append('image[]', blob, `input-${i + 1}.${ext}`)
+      }
+      formData.append('mask', maskBlob, 'mask.png')
+
+      response = await fetch(buildApiUrl(settings.baseUrl, 'images/edits', proxyConfig, useApiProxy), {
+        method: 'POST',
+        headers: requestHeaders,
+        cache: 'no-store',
+        body: formData,
+        signal: controller.signal,
+      })
+    } else if (inputImageDataUrls.length > 0) {
+      // 有输入图但无遮罩：使用 /images/generations + image 数组 (gpt-image-2-all)
+      const body: Record<string, unknown> = {
+        model: 'gpt-image-2-all',
+        prompt,
+        n: params.n > 1 ? params.n : undefined,
+        size: params.size,
+        image: inputImageDataUrls,
+      }
+
+      response = await fetch(buildApiUrl(settings.baseUrl, 'images/generations', proxyConfig, useApiProxy), {
+        method: 'POST',
+        headers: {
+          ...requestHeaders,
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      })
+    } else {
+      // 纯文生图
+      const body: Record<string, unknown> = {
+        model: settings.model,
+        prompt,
+        size: params.size,
+      }
+      if (params.n > 1) {
+        body.n = params.n
+      }
+
+      response = await fetch(buildApiUrl(settings.baseUrl, 'images/generations', proxyConfig, useApiProxy), {
+        method: 'POST',
+        headers: {
+          ...requestHeaders,
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      })
+    }
+
+    if (!response.ok) {
+      throw new Error(await getApiErrorMessage(response))
+    }
+
+    const payload = await response.json() as YunwuApiResponse
+    const parsed = parseYunwuResponse(payload, mime)
+
+    if (!parsed.length) {
+      throw new Error('接口未返回图片数据')
+    }
+
+    // 下载 URL 图片
+    const images: string[] = []
+    const revisedPrompts: Array<string | undefined> = []
+    for (const item of parsed) {
+      if (item.image) {
+        images.push(item.image)
+      } else if ((item as any)._url) {
+        images.push(await fetchImageUrlAsDataUrl((item as any)._url, mime, controller.signal))
+      }
+      revisedPrompts.push(item.revisedPrompt)
+    }
+
+    if (!images.length) {
+      throw new Error('接口未返回可用图片数据')
+    }
+
+    return {
+      images,
+      actualParamsList: images.map(() => ({})),
+      revisedPrompts,
     }
   } finally {
     clearTimeout(timeoutId)
