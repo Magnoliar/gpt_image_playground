@@ -1,6 +1,7 @@
 import type { AppSettings, ImageApiResponse, ResponsesApiResponse, TaskParams, YunwuApiResponse } from '../types'
 import { dataUrlToBlob, imageDataUrlToPngBlob, maskDataUrlToPngBlob } from './canvasImage'
 import { buildApiUrl, isApiProxyAvailable, readClientDevProxyConfig } from './devProxy'
+import { log } from './logger'
 
 const MIME_MAP: Record<string, string> = {
   png: 'image/png',
@@ -611,13 +612,35 @@ async function callYunwuApiSingle(opts: CallApiOptions): Promise<CallApiResult> 
   const requestHeaders = createRequestHeaders(settings)
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), settings.timeout * 1000)
+  const reqId = Math.random().toString(36).slice(2, 8)
+  const startTime = Date.now()
+
+  // 监听 abort 事件，记录原因
+  controller.signal.addEventListener('abort', () => {
+    const elapsed = Date.now() - startTime
+    const reason = controller.signal.reason ?? 'unknown'
+    log.error('YunwuAPI', `[${reqId}] AbortController triggered after ${elapsed}ms`, { reason: String(reason) })
+  })
+
+  const timeoutId = setTimeout(() => {
+    log.warn('YunwuAPI', `[${reqId}] Timeout after ${settings.timeout}s, aborting`)
+    controller.abort()
+  }, settings.timeout * 1000)
 
   try {
     let response: Response
+    let endpoint: string
 
     if (inputImageDataUrls.length > 0 && opts.maskDataUrl) {
       // 有遮罩：使用 /images/edits multipart
+      endpoint = 'images/edits'
+      log.info('YunwuAPI', `[${reqId}] → POST ${endpoint} (multipart, mask edit)`, {
+        model: settings.model,
+        prompt: prompt.slice(0, 100),
+        size: params.size,
+        inputImages: inputImageDataUrls.length,
+      })
+
       const formData = new FormData()
       formData.append('model', settings.model)
       formData.append('prompt', prompt)
@@ -650,7 +673,9 @@ async function callYunwuApiSingle(opts: CallApiOptions): Promise<CallApiResult> 
       }
       formData.append('mask', maskBlob, 'mask.png')
 
-      response = await fetch(buildApiUrl(settings.baseUrl, 'images/edits', proxyConfig, useApiProxy), {
+      const url = buildApiUrl(settings.baseUrl, endpoint, proxyConfig, useApiProxy)
+      log.debug('YunwuAPI', `[${reqId}] Request URL: ${url}`)
+      response = await fetch(url, {
         method: 'POST',
         headers: requestHeaders,
         cache: 'no-store',
@@ -659,6 +684,7 @@ async function callYunwuApiSingle(opts: CallApiOptions): Promise<CallApiResult> 
       })
     } else if (inputImageDataUrls.length > 0) {
       // 有输入图但无遮罩：使用 /images/generations + image 数组 (gpt-image-2-all)
+      endpoint = 'images/generations'
       const body: Record<string, unknown> = {
         model: 'gpt-image-2-all',
         prompt,
@@ -667,7 +693,17 @@ async function callYunwuApiSingle(opts: CallApiOptions): Promise<CallApiResult> 
         image: inputImageDataUrls,
       }
 
-      response = await fetch(buildApiUrl(settings.baseUrl, 'images/generations', proxyConfig, useApiProxy), {
+      log.info('YunwuAPI', `[${reqId}] → POST ${endpoint} (JSON, image merge)`, {
+        model: 'gpt-image-2-all',
+        prompt: prompt.slice(0, 100),
+        size: params.size,
+        inputImages: inputImageDataUrls.length,
+        n: params.n,
+      })
+
+      const url = buildApiUrl(settings.baseUrl, endpoint, proxyConfig, useApiProxy)
+      log.debug('YunwuAPI', `[${reqId}] Request URL: ${url}`)
+      response = await fetch(url, {
         method: 'POST',
         headers: {
           ...requestHeaders,
@@ -679,6 +715,7 @@ async function callYunwuApiSingle(opts: CallApiOptions): Promise<CallApiResult> 
       })
     } else {
       // 纯文生图
+      endpoint = 'images/generations'
       const body: Record<string, unknown> = {
         model: settings.model,
         prompt,
@@ -688,7 +725,16 @@ async function callYunwuApiSingle(opts: CallApiOptions): Promise<CallApiResult> 
         body.n = params.n
       }
 
-      response = await fetch(buildApiUrl(settings.baseUrl, 'images/generations', proxyConfig, useApiProxy), {
+      log.info('YunwuAPI', `[${reqId}] → POST ${endpoint} (JSON, text-to-image)`, {
+        model: settings.model,
+        prompt: prompt.slice(0, 100),
+        size: params.size,
+        n: params.n,
+      })
+
+      const url = buildApiUrl(settings.baseUrl, endpoint, proxyConfig, useApiProxy)
+      log.debug('YunwuAPI', `[${reqId}] Request URL: ${url}`)
+      response = await fetch(url, {
         method: 'POST',
         headers: {
           ...requestHeaders,
@@ -700,28 +746,68 @@ async function callYunwuApiSingle(opts: CallApiOptions): Promise<CallApiResult> 
       })
     }
 
+    const elapsed = Date.now() - startTime
+    log.info('YunwuAPI', `[${reqId}] ← Response ${response.status} in ${elapsed}ms`)
+
     if (!response.ok) {
+      const errBody = await response.text().catch(() => '(failed to read body)')
+      log.error('YunwuAPI', `[${reqId}] HTTP ${response.status}`, { body: errBody.slice(0, 500) })
       throw new Error(await getApiErrorMessage(response))
     }
 
-    const payload = await response.json() as YunwuApiResponse
+    const responseText = await response.text()
+    log.debug('YunwuAPI', `[${reqId}] Response body (${responseText.length} chars)`, {
+      preview: responseText.slice(0, 300),
+    })
+
+    let payload: YunwuApiResponse
+    try {
+      payload = JSON.parse(responseText)
+    } catch {
+      log.error('YunwuAPI', `[${reqId}] Failed to parse JSON`, { body: responseText.slice(0, 500) })
+      throw new Error('接口返回的不是有效 JSON')
+    }
+
+    // 记录响应结构
+    const hasData = Array.isArray(payload.data) && payload.data.length > 0
+    const hasChoices = Array.isArray(payload.choices) && payload.choices.length > 0
+    log.info('YunwuAPI', `[${reqId}] Response structure: data=${hasData}(${payload.data?.length ?? 0}), choices=${hasChoices}(${payload.choices?.length ?? 0})`)
+
     const parsed = parseYunwuResponse(payload, mime)
+    log.info('YunwuAPI', `[${reqId}] Parsed ${parsed.length} image(s)`)
 
     if (!parsed.length) {
+      log.error('YunwuAPI', `[${reqId}] No images parsed from response`, {
+        payloadKeys: Object.keys(payload),
+        data: payload.data,
+        choices: payload.choices?.map(c => ({ index: c.index, contentLen: c.message?.content?.length })),
+      })
       throw new Error('接口未返回图片数据')
     }
 
     // 下载 URL 图片
     const images: string[] = []
     const revisedPrompts: Array<string | undefined> = []
-    for (const item of parsed) {
+    for (let i = 0; i < parsed.length; i++) {
+      const item = parsed[i]
       if (item.image) {
         images.push(item.image)
+        log.debug('YunwuAPI', `[${reqId}] Image ${i}: base64 (${item.image.length} chars)`)
       } else if ((item as any)._url) {
-        images.push(await fetchImageUrlAsDataUrl((item as any)._url, mime, controller.signal))
+        const url = (item as any)._url as string
+        log.info('YunwuAPI', `[${reqId}] Image ${i}: downloading from URL`, { url: url.slice(0, 100) })
+        try {
+          images.push(await fetchImageUrlAsDataUrl(url, mime, controller.signal))
+          log.info('YunwuAPI', `[${reqId}] Image ${i}: download OK`)
+        } catch (e) {
+          log.error('YunwuAPI', `[${reqId}] Image ${i}: download failed`, { error: String(e) })
+          throw e
+        }
       }
       revisedPrompts.push(item.revisedPrompt)
     }
+
+    log.info('YunwuAPI', `[${reqId}] ✓ Done: ${images.length} image(s), total ${elapsed}ms`)
 
     if (!images.length) {
       throw new Error('接口未返回可用图片数据')
@@ -732,6 +818,13 @@ async function callYunwuApiSingle(opts: CallApiOptions): Promise<CallApiResult> 
       actualParamsList: images.map(() => ({})),
       revisedPrompts,
     }
+  } catch (err) {
+    const elapsed = Date.now() - startTime
+    log.error('YunwuAPI', `[${reqId}] ✗ Error after ${elapsed}ms: ${err instanceof Error ? err.message : String(err)}`, {
+      name: err instanceof Error ? err.name : undefined,
+      stack: err instanceof Error ? err.stack?.split('\n').slice(0, 5) : undefined,
+    })
+    throw err
   } finally {
     clearTimeout(timeoutId)
   }

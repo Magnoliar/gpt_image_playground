@@ -15,11 +15,19 @@ import Toast from './components/Toast'
 import MaskEditorModal from './components/MaskEditorModal'
 import ImageContextMenu from './components/ImageContextMenu'
 import LoginGate from './components/LoginGate'
+import LogViewer from './components/LogViewer'
+import { setDebugMode } from './lib/logger'
 
 const ACCESS_PASSWORD = import.meta.env.VITE_ACCESS_PASSWORD?.trim() || ''
 
 export default function App() {
   const setSettings = useStore((s) => s.setSettings)
+  const debugMode = useStore((s) => s.settings.debugMode)
+
+  // 同步调试模式到 logger
+  useEffect(() => {
+    setDebugMode(debugMode)
+  }, [debugMode])
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search)
@@ -89,6 +97,7 @@ export default function App() {
       <Toast />
       <MaskEditorModal />
       <ImageContextMenu />
+      <LogViewer />
     </>
   )
 

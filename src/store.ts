@@ -23,6 +23,7 @@ import {
   hashDataUrl,
 } from './lib/db'
 import { callImageApi } from './lib/api'
+import { setDebugMode } from './lib/logger'
 import { validateMaskMatchesImage } from './lib/canvasImage'
 import { orderInputImagesForMask } from './lib/mask'
 import { normalizeImageSize } from './lib/size'
@@ -111,6 +112,8 @@ interface AppState {
   setLightboxImageId: (id: string | null, list?: string[]) => void
   showSettings: boolean
   setShowSettings: (v: boolean) => void
+  showLogViewer: boolean
+  setShowLogViewer: (v: boolean) => void
 
   // Toast
   toast: { message: string; type: 'info' | 'success' | 'error' } | null
@@ -134,8 +137,8 @@ export const useStore = create<AppState>()(
     (set, get) => ({
       // Settings
       settings: { ...DEFAULT_SETTINGS },
-      setSettings: (s) => set((st) => ({
-        settings: {
+      setSettings: (s) => set((st) => {
+        const next = {
           ...st.settings,
           ...s,
           apiMode:
@@ -144,8 +147,11 @@ export const useStore = create<AppState>()(
               : st.settings.apiMode ?? DEFAULT_SETTINGS.apiMode,
           codexCli: s.codexCli ?? st.settings.codexCli ?? DEFAULT_SETTINGS.codexCli,
           apiProxy: s.apiProxy ?? st.settings.apiProxy ?? DEFAULT_SETTINGS.apiProxy,
-        },
-      })),
+          debugMode: s.debugMode ?? st.settings.debugMode ?? DEFAULT_SETTINGS.debugMode,
+        }
+        setDebugMode(next.debugMode)
+        return { settings: next }
+      }),
       dismissedCodexCliPrompts: [],
       dismissCodexCliPrompt: (key) => set((st) => ({
         dismissedCodexCliPrompts: st.dismissedCodexCliPrompts.includes(key)
@@ -252,6 +258,8 @@ export const useStore = create<AppState>()(
         set({ lightboxImageId, lightboxImageList: list ?? (lightboxImageId ? [lightboxImageId] : []) }),
       showSettings: false,
       setShowSettings: (showSettings) => set({ showSettings }),
+      showLogViewer: false,
+      setShowLogViewer: (showLogViewer) => set({ showLogViewer }),
 
       // Toast
       toast: null,

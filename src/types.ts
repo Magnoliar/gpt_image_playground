@@ -10,6 +10,7 @@ export interface AppSettings {
   apiMode: ApiMode
   codexCli: boolean
   apiProxy: boolean
+  debugMode: boolean
 }
 
 const DEFAULT_BASE_URL = import.meta.env.VITE_DEFAULT_API_URL?.trim() || 'https://yunwu.ai/v1'
@@ -25,6 +26,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   apiMode: 'yunwu',
   codexCli: false,
   apiProxy: false,
+  debugMode: false,
 }
 
 // ===== 任务参数 =====
