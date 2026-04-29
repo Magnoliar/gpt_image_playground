@@ -21,7 +21,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   baseUrl: DEFAULT_BASE_URL,
   apiKey: '',
   model: DEFAULT_YUNWU_MODEL,
-  timeout: 300,
+  timeout: 600,
   apiMode: 'yunwu',
   codexCli: false,
   apiProxy: false,
