@@ -173,7 +173,7 @@ export default function SettingsModal() {
                     </button>
                   </div>
                   <div data-selectable-text className="text-[10px] text-gray-400 dark:text-gray-500">
-                    由当前部署提供同源代理，用于解决浏览器跨域限制；开启后 API URL 设置会被忽略。
+                    由当前部署提供同源代理，API Key 由服务端注入，无需在前端填写；同时解决浏览器跨域限制。
                   </div>
                 </div>
               )}
@@ -211,7 +211,9 @@ export default function SettingsModal() {
                   </button>
                 </div>
                 <div data-selectable-text className="mt-1 text-[10px] text-gray-400 dark:text-gray-500">
-                  支持通过查询参数覆盖：<code className="bg-gray-100 dark:bg-white/[0.06] px-1 py-0.5 rounded">?apiKey=</code>
+                  {apiProxyEnabled
+                    ? '已开启代理模式，API Key 由服务端注入，无需填写。'
+                    : <>支持通过查询参数覆盖：<code className="bg-gray-100 dark:bg-white/[0.06] px-1 py-0.5 rounded">?apiKey=</code></>}
                 </div>
               </div>
 

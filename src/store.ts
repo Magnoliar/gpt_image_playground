@@ -27,6 +27,7 @@ import { setDebugMode } from './lib/logger'
 import { validateMaskMatchesImage } from './lib/canvasImage'
 import { orderInputImagesForMask } from './lib/mask'
 import { normalizeImageSize } from './lib/size'
+import { isApiReady } from './lib/devProxy'
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate'
 
 // ===== Image cache =====
@@ -361,8 +362,8 @@ export async function submitTask(options: { allowFullMask?: boolean } = {}) {
   const { settings, prompt, inputImages, maskDraft, params, showToast, setConfirmDialog } =
     useStore.getState()
 
-  if (!settings.apiKey) {
-    showToast('请先在设置中配置 API Key', 'error')
+  if (!isApiReady(settings)) {
+    showToast('请先在设置中配置 API Key，或开启 API 代理', 'error')
     useStore.getState().setShowSettings(true)
     return
   }

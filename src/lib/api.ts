@@ -98,12 +98,16 @@ async function getApiErrorMessage(response: Response): Promise<string> {
   return errorMsg
 }
 
-function createRequestHeaders(settings: AppSettings): Record<string, string> {
-  return {
-    Authorization: `Bearer ${settings.apiKey}`,
+function createRequestHeaders(settings: AppSettings, useApiProxy = false): Record<string, string> {
+  const headers: Record<string, string> = {
     'Cache-Control': 'no-store, no-cache, max-age=0',
     Pragma: 'no-cache',
   }
+  // When using the API proxy, the server injects the key from env vars
+  if (!useApiProxy) {
+    headers.Authorization = `Bearer ${settings.apiKey}`
+  }
+  return headers
 }
 
 function createResponsesImageTool(
@@ -286,7 +290,7 @@ async function callImagesApiSingle(opts: CallApiOptions): Promise<CallApiResult>
   const mime = MIME_MAP[params.output_format] || 'image/png'
   const proxyConfig = readClientDevProxyConfig()
   const useApiProxy = settings.apiProxy && isApiProxyAvailable(proxyConfig)
-  const requestHeaders = createRequestHeaders(settings)
+  const requestHeaders = createRequestHeaders(settings, useApiProxy)
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), settings.timeout * 1000)
@@ -463,7 +467,7 @@ async function callResponsesImageApiSingle(opts: CallApiOptions): Promise<CallAp
   const mime = MIME_MAP[params.output_format] || 'image/png'
   const proxyConfig = readClientDevProxyConfig()
   const useApiProxy = settings.apiProxy && isApiProxyAvailable(proxyConfig)
-  const requestHeaders = createRequestHeaders(settings)
+  const requestHeaders = createRequestHeaders(settings, useApiProxy)
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), settings.timeout * 1000)
 
@@ -609,7 +613,7 @@ async function callYunwuApiSingle(opts: CallApiOptions): Promise<CallApiResult> 
   const mime = MIME_MAP[params.output_format] || 'image/png'
   const proxyConfig = readClientDevProxyConfig()
   const useApiProxy = settings.apiProxy && isApiProxyAvailable(proxyConfig)
-  const requestHeaders = createRequestHeaders(settings)
+  const requestHeaders = createRequestHeaders(settings, useApiProxy)
 
   const controller = new AbortController()
   const reqId = Math.random().toString(36).slice(2, 8)

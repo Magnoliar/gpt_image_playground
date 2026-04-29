@@ -86,3 +86,12 @@ export function readClientDevProxyConfig(): DevProxyConfig | null {
 export function isApiProxyAvailable(proxyConfig: DevProxyConfig | null = readClientDevProxyConfig()): boolean {
   return import.meta.env.VITE_API_PROXY_AVAILABLE === 'true' || Boolean(proxyConfig?.enabled)
 }
+
+/**
+ * Returns true if the app can make API calls — either the user provided an API key,
+ * or the server-side API proxy is available (key is injected from env vars).
+ */
+export function isApiReady(settings: { apiKey: string; apiProxy: boolean }): boolean {
+  if (settings.apiKey.trim()) return true
+  return settings.apiProxy && isApiProxyAvailable()
+}
