@@ -7,9 +7,12 @@ if [ "$ENABLE_API_PROXY" = "true" ]; then
     API_PROXY_AVAILABLE=true
 fi
 
-# 查找所有 js 文件并将占位符替换为实际的 API_URL
+ACCESS_PASSWORD=${ACCESS_PASSWORD:-}
+
+# 查找所有 js 文件并将占位符替换为实际的值
 find /usr/share/nginx/html/assets -type f -name "*.js" -exec sed -i "s|__VITE_DEFAULT_API_URL_PLACEHOLDER__|$API_URL|g" {} +
 find /usr/share/nginx/html/assets -type f -name "*.js" -exec sed -i "s|__VITE_API_PROXY_AVAILABLE_PLACEHOLDER__|$API_PROXY_AVAILABLE|g" {} +
+find /usr/share/nginx/html/assets -type f -name "*.js" -exec sed -i "s|__VITE_ACCESS_PASSWORD_PLACEHOLDER__|$ACCESS_PASSWORD|g" {} +
 
 # 检查是否启用了 API 代理
 if [ "$ENABLE_API_PROXY" != "true" ]; then

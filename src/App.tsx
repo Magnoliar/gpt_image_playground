@@ -14,6 +14,9 @@ import ConfirmDialog from './components/ConfirmDialog'
 import Toast from './components/Toast'
 import MaskEditorModal from './components/MaskEditorModal'
 import ImageContextMenu from './components/ImageContextMenu'
+import LoginGate from './components/LoginGate'
+
+const ACCESS_PASSWORD = import.meta.env.VITE_ACCESS_PASSWORD?.trim() || ''
 
 export default function App() {
   const setSettings = useStore((s) => s.setSettings)
@@ -69,7 +72,7 @@ export default function App() {
     return () => document.removeEventListener('dragstart', preventPageImageDrag)
   }, [])
 
-  return (
+  const appContent = (
     <>
       <Header />
       <main data-home-main data-drag-select-surface className="pb-48">
@@ -88,4 +91,10 @@ export default function App() {
       <ImageContextMenu />
     </>
   )
+
+  if (ACCESS_PASSWORD) {
+    return <LoginGate password={ACCESS_PASSWORD}>{appContent}</LoginGate>
+  }
+
+  return appContent
 }

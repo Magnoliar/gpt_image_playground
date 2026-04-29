@@ -106,6 +106,14 @@ https://cooksleep.github.io/gpt_image_playground
 VITE_DEFAULT_API_URL=https://yunwu.ai/v1
 ```
 
+如需启用访问密码保护，可添加环境变量：
+
+```bash
+VITE_ACCESS_PASSWORD=your-password-here
+```
+
+设置后，用户访问页面时需输入密码才能使用。密码验证状态保存在 `sessionStorage` 中，关闭浏览器后需重新输入。
+
 部署完成后，打开 Vercel 分配的域名，在页面右上角设置中填入 API Key 即可使用。默认已配置为云雾 API 模式。
 
 **更新说明：**
@@ -135,7 +143,16 @@ VITE_DEFAULT_API_URL=https://yunwu.ai/v1
 
 ```bash
 docker run -d -p 8080:80 \
-  -e API_URL=https://api.openai.com/v1 \
+  -e API_URL=https://yunwu.ai/v1 \
+  ghcr.io/cooksleep/gpt_image_playground:latest
+```
+
+如需启用访问密码保护，可添加 `ACCESS_PASSWORD` 环境变量：
+
+```bash
+docker run -d -p 8080:80 \
+  -e API_URL=https://yunwu.ai/v1 \
+  -e ACCESS_PASSWORD=your-password-here \
   ghcr.io/cooksleep/gpt_image_playground:latest
 ```
 
@@ -156,7 +173,8 @@ services:
   gpt-image-playground:
     image: ghcr.io/cooksleep/gpt_image_playground:latest
     environment:
-      - API_URL=https://api.openai.com/v1
+      - API_URL=https://yunwu.ai/v1
+      - ACCESS_PASSWORD=your-password-here  # 可选，不设置则无密码保护
     ports:
       - "8080:80"
     restart: unless-stopped
@@ -191,7 +209,9 @@ docker compose up -d
 1. **环境准备 (可选)**
    你可以在项目根目录新建 `.env.local` 文件，配置构建时的默认 API URL：
    ```bash
-   VITE_DEFAULT_API_URL=https://api.openai.com/v1
+   VITE_DEFAULT_API_URL=https://yunwu.ai/v1
+   # 可选：设置访问密码
+   # VITE_ACCESS_PASSWORD=your-password-here
    ```
 
 2. **安装依赖与启动开发服务器**

@@ -268,6 +268,14 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'gpt-image-playground',
+      version: 2,
+      migrate: (persisted: unknown, version: number) => {
+        // 从 v0/v1 升级时，清除旧设置以使用新的云雾 API 默认值
+        if (version < 2) {
+          return { settings: { ...DEFAULT_SETTINGS }, params: { ...DEFAULT_PARAMS }, dismissedCodexCliPrompts: [] }
+        }
+        return persisted as { settings: AppSettings; params: TaskParams; dismissedCodexCliPrompts: string[] }
+      },
       partialize: (state) => ({
         settings: state.settings,
         params: state.params,
